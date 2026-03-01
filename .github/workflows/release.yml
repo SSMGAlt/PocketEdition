@@ -36,7 +36,7 @@ jobs:
           for PATTERN in MCPE_VERSION APP_VERSION VERSION_STRING GAME_VERSION CLIENT_VERSION; do
             FOUND=$(grep -rh --include="*.h" --include="*.hpp" --include="*.cpp" \
               -E "#define[[:space:]]+${PATTERN}[[:space:]]+" \
-              handheld/jni/ handheld/src/ 2>/dev/null \
+              handheld/project/android/jni/ 2>/dev/null \
               | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
             if [ -n "$FOUND" ]; then
               VERSION="$FOUND"
@@ -97,7 +97,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-release-libs
-          path: handheld/libs/**/*.so
+          path: handheld/project/android/libs/**/*.so
           if-no-files-found: error
 
   build-ios:
@@ -136,6 +136,7 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [detect-version, build-android, build-ios]
+    # Run if at least one build job succeeded (the other may have been skipped by platform choice)
     if: |
       always() &&
       (needs.build-android.result == 'success' || needs.build-android.result == 'skipped') &&
