@@ -83,10 +83,9 @@ jobs:
       - name: Download and extract NDK r10e
         run: |
           curl -fL \
-            "https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.bin" \
-            -o ndk-r10e.bin
-          chmod +x ndk-r10e.bin
-          ./ndk-r10e.bin
+            "https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip" \
+            -o ndk-r10e.zip
+          unzip -q ndk-r10e.zip
           echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-ndk-r10e" >> $GITHUB_ENV
 
       - name: Verify NDK
