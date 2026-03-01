@@ -25,7 +25,7 @@ jobs:
       - name: Check required build files
         run: |
           MISSING=0
-          for F in handheld/jni/Android.mk handheld/jni/Application.mk; do
+          for F in handheld/project/android/jni/Android.mk handheld/project/android/jni/Application.mk; do
             if [ -f "$F" ]; then
               echo "FOUND   $F"
             else
@@ -37,12 +37,12 @@ jobs:
 
       - name: Print Application.mk
         run: |
-          if [ -f handheld/jni/Application.mk ]; then
-            cat handheld/jni/Application.mk
+          if [ -f handheld/project/android/jni/Application.mk ]; then
+            cat handheld/project/android/jni/Application.mk
             echo ""
             # Warn if APP_STL is set to a modern value that NDK r10e won't have
             if grep -qE 'APP_STL\s*:=\s*(c\+\+_static|c\+\+_shared|libc\+\+)' \
-                handheld/jni/Application.mk; then
+                handheld/project/android/jni/Application.mk; then
               echo "WARNING: APP_STL is set to a modern STL. This source requires stlport_static."
               echo "         Change APP_STL to stlport_static in Application.mk."
             fi
@@ -50,7 +50,7 @@ jobs:
 
       - name: Source file counts
         run: |
-          find handheld/ tools/ -not -path "*/.git/*" \
+          find handheld/project/ tools/ -not -path "*/.git/*" \
             -regex ".*\.\(cpp\|cc\|c\|h\|hpp\|m\|mm\|java\)$" 2>/dev/null \
             | awk -F. '{print $NF}' | sort | uniq -c | sort -rn
 
@@ -64,7 +64,7 @@ jobs:
         run: |
           grep -rn --include="*.h" --include="*.cpp" \
             -E '\b(LOG|LOGD|LOGI|LOGE|LOGW|LOG_DEBUG|assert\s*\(|_DEBUG)\b' \
-            handheld/jni/ 2>/dev/null | head -30 || echo "none found"
+            handheld/project/android/jni/ 2>/dev/null | head -30 || echo "none found"
 
   build-android-debug:
     name: Android Debug (NDK r10e / GCC 4.8)
@@ -99,7 +99,7 @@ jobs:
       - name: Check symbol presence in unstripped libs
         run: |
           # obj/ contains the unstripped builds; libs/ contains stripped copies
-          find handheld/obj -name "*.so" 2>/dev/null | while read -r f; do
+          find handheld/project/android/obj -name "*.so" 2>/dev/null | while read -r f; do
             SYMS=$(nm "$f" 2>/dev/null | grep -c ' T ' || echo 0)
             echo "$f  ($SYMS exported text symbols)"
           done
@@ -110,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-debug-unstripped-${{ github.run_number }}
-          path: handheld/obj/**/*.so
+          path: handheld/project/android/obj/**/*.so
           retention-days: 7
           if-no-files-found: error
 
@@ -118,7 +118,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-debug-libs-${{ github.run_number }}
-          path: handheld/libs/**/*.so
+          path: handheld/project/android/libs/**/*.so
           retention-days: 7
           if-no-files-found: error
 
