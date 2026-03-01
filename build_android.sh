@@ -11,8 +11,8 @@
 #   armeabi-v7a - the original target ABI
 #
 # NDK r10e downloads:
-#   Linux:  https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.bin
-#   macOS:  https://dl.google.com/android/repository/android-ndk-r10e-darwin-x86_64.bin
+#   Linux:  https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip
+#   macOS:  https://dl.google.com/android/repository/android-ndk-r10e-darwin-x86_64.zip
 #
 # Usage:
 #   ./build_android.sh [release|debug] [clean]
@@ -34,8 +34,8 @@ if [ ! -d "$NDK_PATH" ]; then
     echo "ERROR: NDK r10e not found at: $NDK_PATH"
     echo ""
     echo "Set ANDROID_NDK_HOME or install to ~/android-ndk-r10e"
-    echo "Linux: https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.bin"
-    echo "macOS: https://dl.google.com/android/repository/android-ndk-r10e-darwin-x86_64.bin"
+    echo "Linux: https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip"
+    echo "macOS: https://dl.google.com/android/repository/android-ndk-r10e-darwin-x86_64.zip"
     exit 1
 fi
 
