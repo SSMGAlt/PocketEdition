@@ -27,7 +27,7 @@ NDK_PATH="${ANDROID_NDK_HOME:-${NDK_HOME:-${HOME}/android-ndk-r10e}}"
 NDK_BUILD="$NDK_PATH/ndk-build"
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-HANDHELD_DIR="$REPO_ROOT/handheld"
+HANDHELD_DIR="$REPO_ROOT/handheld/project/android"
 JNI_DIR="$HANDHELD_DIR/jni"
 
 if [ ! -d "$NDK_PATH" ]; then
