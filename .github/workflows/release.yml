@@ -64,8 +64,8 @@ jobs:
   build-android:
     name: Android Release (NDK r10e / GCC 4.8)
     # NDK r10e requires glibc 2.17+. Ubuntu 20.04 ships 2.31, which is compatible.
-    # Ubuntu 22.04+ also works. Do not use ubuntu-latest blindly if that changes.
-    runs-on: ubuntu-20.04
+    # Ubuntu 22.04 glibc 2.35 satisfies NDK r10e's 2.17 minimum requirement.
+    runs-on: ubuntu-22.04
     needs: detect-version
     if: inputs.platform == 'android' || inputs.platform == 'both'
 
@@ -139,7 +139,6 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [detect-version, build-android, build-ios]
-    # Run if at least one build job succeeded (the other may have been skipped by platform choice)
     if: |
       always() &&
       (needs.build-android.result == 'success' || needs.build-android.result == 'skipped') &&
