@@ -1,0 +1,195 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to build"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - android
+          - ios
+      tag:
+        description: "Release tag (e.g. v0.8.0). Leave blank to auto-detect from source."
+        required: false
+        default: ""
+
+jobs:
+
+  detect-version:
+    name: Detect Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag:     ${{ steps.ver.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from source headers
+        id: ver
+        run: |
+          VERSION=""
+          for PATTERN in MCPE_VERSION APP_VERSION VERSION_STRING GAME_VERSION CLIENT_VERSION; do
+            FOUND=$(grep -rh --include="*.h" --include="*.hpp" --include="*.cpp" \
+              -E "#define[[:space:]]+${PATTERN}[[:space:]]+" \
+              handheld/jni/ handheld/src/ 2>/dev/null \
+              | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+            if [ -n "$FOUND" ]; then
+              VERSION="$FOUND"
+              break
+            fi
+          done
+
+          # If the source has no version define, fall back to the short commit SHA
+          if [ -z "$VERSION" ]; then
+            VERSION="0.0.0-$(git rev-parse --short HEAD)"
+          fi
+
+          # Allow the manual input to override the detected version
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v${VERSION}"
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG"         >> $GITHUB_OUTPUT
+          echo "Detected version : $VERSION"
+          echo "Release tag      : $TAG"
+
+  build-android:
+    name: Android Release (NDK r10e / GCC 4.8)
+    # NDK r10e requires glibc 2.17+. Ubuntu 20.04 ships 2.31, which is compatible.
+    # Ubuntu 22.04+ also works. Do not use ubuntu-latest blindly if that changes.
+    runs-on: ubuntu-20.04
+    needs: detect-version
+    if: inputs.platform == 'android' || inputs.platform == 'both'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      - name: Download and extract NDK r10e
+        run: |
+          curl -fL \
+            "https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.bin" \
+            -o ndk-r10e.bin
+          chmod +x ndk-r10e.bin
+          # The .bin is a self-extracting archive. It extracts to android-ndk-r10e/
+          # in the current directory without prompts.
+          ./ndk-r10e.bin
+          echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-ndk-r10e" >> $GITHUB_ENV
+
+      - name: Verify NDK
+        run: $ANDROID_NDK_HOME/ndk-build --version
+
+      - name: Build release
+        run: |
+          chmod +x build_android.sh
+          ./build_android.sh release
+
+      - name: Upload stripped libs
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-libs
+          path: handheld/libs/**/*.so
+          if-no-files-found: error
+
+  build-ios:
+    name: iOS Release (Xcode)
+    runs-on: macos-13
+    needs: detect-version
+    if: inputs.platform == 'ios' || inputs.platform == 'both'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Locate Xcode project
+        id: proj
+        run: |
+          XCPROJ=$(find . -name "*.xcodeproj" -not -path "*/.git/*" | head -1)
+          if [ -z "$XCPROJ" ]; then
+            echo "ERROR: No .xcodeproj found in repository."
+            exit 1
+          fi
+          echo "path=$XCPROJ" >> $GITHUB_OUTPUT
+          echo "Found: $XCPROJ"
+
+      - name: Build release
+        run: |
+          chmod +x build_ios.sh
+          ./build_ios.sh release
+
+      - name: Upload iOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-build
+          path: build/ios/Build/Products/Release-iphonesimulator/
+          if-no-files-found: error
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [detect-version, build-android, build-ios]
+    # Run if at least one build job succeeded (the other may have been skipped by platform choice)
+    if: |
+      always() &&
+      (needs.build-android.result == 'success' || needs.build-android.result == 'skipped') &&
+      (needs.build-ios.result == 'success' || needs.build-ios.result == 'skipped') &&
+      (needs.build-android.result == 'success' || needs.build-ios.result == 'success')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Android artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release-libs
+          path: dist/android-libs
+        continue-on-error: true
+
+      - name: Download iOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-release-build
+          path: dist/ios
+        continue-on-error: true
+
+      - name: Package artifacts
+        run: |
+          mkdir -p release-out
+          [ -d dist/android-libs ] && zip -r release-out/android-libs.zip dist/android-libs/
+          [ -d dist/ios ]          && zip -r release-out/ios-build.zip dist/ios/
+          ls -lh release-out/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.detect-version.outputs.tag }}
+          name: "MCPE ${{ needs.detect-version.outputs.version }}"
+          body: |
+            Minecraft Pocket Edition — ${{ needs.detect-version.outputs.version }}
+
+            Built from 2013 source (archival / historical build).
+            Toolchain: NDK r10e / GCC 4.8 / stlport_static / android-8
+
+            | File | Contents |
+            |------|----------|
+            | `android-libs.zip` | Native .so libraries (armeabi-v7a) |
+            | `ios-build.zip` | iOS simulator build (.app) |
+
+            Commit: ${{ github.sha }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          files: release-out/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
