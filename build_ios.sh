@@ -31,8 +31,10 @@ case "$HOST_ARCH" in
     ;;
 esac
 
-DERIVED="$ROOT/build/ios"
-mkdir -p "$DERIVED"
+# Match legacy DerivedData layout (…/Build/Products/<Config>-iphonesimulator/) for CI artifact paths.
+# Do not use -derivedDataPath without -scheme: Xcode 15+ errors with only -target (exit 64).
+BUILD_IOS="$ROOT/build/ios"
+mkdir -p "$BUILD_IOS/Build/Products" "$BUILD_IOS/Build/Intermediates.noindex"
 
 # iphoneos6.0 + llvmgcc42 in the checked-in project are obsolete; -sdk iphonesimulator + Clang override below.
 # Deployment target is raised only so the modern linker/clang accept the build (2013 game code remains unchanged).
@@ -41,7 +43,8 @@ exec xcodebuild \
   -target minecraftpe \
   -configuration "$CONFIGURATION" \
   -sdk iphonesimulator \
-  -derivedDataPath "$DERIVED" \
+  OBJROOT="$BUILD_IOS/Build/Intermediates.noindex" \
+  SYMROOT="$BUILD_IOS/Build/Products" \
   IPHONEOS_DEPLOYMENT_TARGET=11.0 \
   VALID_ARCHS="$SIM_ARCH" \
   ARCHS="$SIM_ARCH" \
