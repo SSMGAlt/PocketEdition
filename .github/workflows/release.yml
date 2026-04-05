@@ -1,4 +1,10 @@
+# Runners: standard GitHub-hosted images only (no self-hosted labels).
+# - Android: ubuntu-22.04 — NDK r10e predates current ubuntu-latest; pin this LTS until GitHub retires it.
+# - iOS: macos-latest — largest runner pool / shortest queues vs. deprecated version-pinned macOS images.
 name: Release
+
+permissions:
+  contents: write
 
 on:
   workflow_dispatch:
@@ -22,6 +28,7 @@ jobs:
   detect-version:
     name: Detect Version
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.ver.outputs.version }}
       tag:     ${{ steps.ver.outputs.tag }}
@@ -63,9 +70,10 @@ jobs:
 
   build-android:
     name: Android Release (NDK r10e / GCC 4.8)
-    # NDK r10e requires glibc 2.17+. Ubuntu 20.04 ships 2.31, which is compatible.
-    # Ubuntu 22.04 glibc 2.35 satisfies NDK r10e's 2.17 minimum requirement.
+    # NDK r10e requires glibc 2.17+. Ubuntu 22.04 is pinned (not ubuntu-latest) so the prebuilt
+    # NDK keeps working if ubuntu-latest moves to a newer glibc/toolchain mix.
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
     needs: detect-version
     if: inputs.platform == 'android' || inputs.platform == 'both'
 
@@ -77,16 +85,32 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
 
+      - uses: actions/cache@v4
+        id: ndk-cache
+        with:
+          path: android-ndk-r10e
+          key: ${{ runner.os }}-android-ndk-r10e-linux-x86_64-v1
+
       - name: Download and extract NDK r10e
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
         run: |
+          set -e
           curl -fL \
+            --retry 5 --retry-delay 15 --retry-all-errors \
+            --connect-timeout 30 \
             "https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip" \
             -o ndk-r10e.zip
           unzip -q ndk-r10e.zip
-          echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-ndk-r10e" >> $GITHUB_ENV
+          rm -f ndk-r10e.zip
+
+      - name: Set ANDROID_NDK_HOME
+        run: echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-ndk-r10e" >> $GITHUB_ENV
 
       - name: Verify NDK
         run: $ANDROID_NDK_HOME/ndk-build --version
+
+      - name: Show NDK module path (RakNet)
+        run: echo "NDK_MODULE_PATH=$GITHUB_WORKSPACE/handheld/project/lib_projects"
 
       - name: Build release
         run: |
@@ -102,12 +126,19 @@ jobs:
 
   build-ios:
     name: iOS Release (Xcode)
-    runs-on: macos-13
+    runs-on: macos-latest
+    timeout-minutes: 90
     needs: detect-version
     if: inputs.platform == 'ios' || inputs.platform == 'both'
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Xcode and SDK
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-path
+          uname -m
 
       - name: Locate Xcode project
         id: proj
@@ -135,6 +166,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [detect-version, build-android, build-ios]
     # Run if at least one build job succeeded (the other may have been skipped by platform choice)
     if: |
@@ -176,7 +208,7 @@ jobs:
             Minecraft Pocket Edition — ${{ needs.detect-version.outputs.version }}
 
             Built from 2013 source (archival / historical build).
-            Toolchain: NDK r10e / GCC 4.8 / stlport_static / android-8
+            Toolchain: NDK r10e / GCC 4.8 / stlport_static / APP_PLATFORM android-9 (see handheld/project/android/jni/Application.mk)
 
             | File | Contents |
             |------|----------|

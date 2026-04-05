@@ -1,3 +1,5 @@
+# Runners: standard GitHub-hosted images only. Android uses ubuntu-22.04 for NDK r10e compatibility;
+# iOS uses macos-latest for the largest runner pool (avoids long queues on version-pinned macOS).
 name: Debug Build
 
 on:
@@ -18,6 +20,7 @@ jobs:
   source-scan:
     name: Source Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +72,7 @@ jobs:
   build-android-debug:
     name: Android Debug (NDK r10e / GCC 4.8)
     runs-on: ubuntu-22.04
+    timeout-minutes: 120
     needs: source-scan
     if: inputs.platform == 'android' || inputs.platform == 'both'
 
@@ -80,16 +84,32 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
 
+      - uses: actions/cache@v4
+        id: ndk-cache
+        with:
+          path: android-ndk-r10e
+          key: ${{ runner.os }}-android-ndk-r10e-linux-x86_64-v1
+
       - name: Download and extract NDK r10e
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
         run: |
+          set -e
           curl -fL \
+            --retry 5 --retry-delay 15 --retry-all-errors \
+            --connect-timeout 30 \
             "https://dl.google.com/android/repository/android-ndk-r10e-linux-x86_64.zip" \
             -o ndk-r10e.zip
           unzip -q ndk-r10e.zip
-          echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-ndk-r10e" >> $GITHUB_ENV
+          rm -f ndk-r10e.zip
+
+      - name: Set ANDROID_NDK_HOME
+        run: echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-ndk-r10e" >> $GITHUB_ENV
 
       - name: Verify NDK
         run: $ANDROID_NDK_HOME/ndk-build --version
+
+      - name: Show NDK module path (RakNet)
+        run: echo "NDK_MODULE_PATH=$GITHUB_WORKSPACE/handheld/project/lib_projects"
 
       - name: Build debug
         run: |
@@ -124,12 +144,19 @@ jobs:
 
   build-ios-debug:
     name: iOS Debug (Xcode)
-    runs-on: macos-13
+    runs-on: macos-latest
+    timeout-minutes: 90
     needs: source-scan
     if: inputs.platform == 'ios' || inputs.platform == 'both'
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Xcode and SDK
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-path
+          uname -m
 
       - name: Locate Xcode project
         run: |
@@ -157,6 +184,7 @@ jobs:
   summary:
     name: Summary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [build-android-debug, build-ios-debug]
     if: always()
 

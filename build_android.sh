@@ -1,44 +1,44 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Native Android build (NDK r10e, armeabi-v7a, stlport_static) — matches handheld/project/android/jni.
+set -euo pipefail
 
-# Build script for Android with improved error handling and architecture support
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+JNI_DIR="$ROOT/handheld/project/android/jni"
 
-set -e
+if [[ ! -f "$JNI_DIR/Application.mk" ]] || [[ ! -f "$JNI_DIR/Android.mk" ]]; then
+  echo "error: expected jni tree at $JNI_DIR"
+  exit 1
+fi
 
-# Function to check Application.mk
-check_application_mk() {
-    if [ ! -f "Application.mk" ]; then
-        echo "Error: Application.mk not found!"
-        exit 1
-    fi
-}
+if [[ -z "${ANDROID_NDK_HOME:-}" ]]; then
+  echo "error: ANDROID_NDK_HOME is not set (point it at your NDK r10e root, e.g. .../android-ndk-r10e)"
+  exit 1
+fi
 
-# Function to build for a specific architecture
-build_for_arch() {
-    local arch=$1
-    echo "Building for architecture: $arch"
-    # Add build command here (example: ndk-build APP_ABI=$arch)
-}
+NDK_BUILD="$ANDROID_NDK_HOME/ndk-build"
+if [[ ! -x "$NDK_BUILD" ]]; then
+  echo "error: not executable: $NDK_BUILD"
+  exit 1
+fi
 
-# Main script execution
+# RakNet is pulled in via $(call import-module, raknet/jni)
+export NDK_MODULE_PATH="$ROOT/handheld/project/lib_projects"
 
-# Check if Application.mk exists
-check_application_mk
+NPROC="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
 
-# Verify specified architectures (e.g., arm64-v8a, armeabi-v7a, x86)
-architectures=(arm64-v8a armeabi-v7a x86)
+MODE="${1:-debug}"
+case "$MODE" in
+  debug)
+    # NDK_DEBUG=1 keeps symbols; APP_OPTIM=debug matches a typical debug workflow.
+    (cd "$JNI_DIR" && "$NDK_BUILD" -j"$NPROC" NDK_DEBUG=1 APP_OPTIM=debug V=1)
+    ;;
+  release)
+    (cd "$JNI_DIR" && "$NDK_BUILD" -j"$NPROC" NDK_DEBUG=0 APP_OPTIM=release V=1)
+    ;;
+  *)
+    echo "usage: $0 {debug|release}"
+    exit 1
+    ;;
+esac
 
-# Create output directory
-output_dir="build_output"
-mkdir -p $output_dir
-
-# Build for each architecture
-for arch in "${architectures[@]}"; do
-    build_for_arch $arch > "$output_dir/build_$arch.log" 2>&1
-    if [ $? -ne 0 ]; then
-        echo "Build failed for architecture: $arch. Check log: $output_dir/build_$arch.log"
-        exit 1
-    fi
-    echo "Build successful for architecture: $arch"
-done
-
-echo "All builds completed successfully!"
+echo "ok: $MODE build finished (see handheld/project/android/libs and obj/)"
