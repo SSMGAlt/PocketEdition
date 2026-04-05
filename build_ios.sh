@@ -37,7 +37,8 @@ BUILD_IOS="$ROOT/build/ios"
 mkdir -p "$BUILD_IOS/Build/Products" "$BUILD_IOS/Build/Intermediates.noindex"
 
 # iphoneos6.0 + llvmgcc42 in the checked-in project are obsolete; -sdk iphonesimulator + Clang override below.
-# Deployment target is raised only so the modern linker/clang accept the build (2013 game code remains unchanged).
+# Xcode 16+ simulators require IPHONEOS_DEPLOYMENT_TARGET >= 12.0 (warning becomes unsupportable below that).
+# Extra C flags: legacy code triggers -Wshorten-64-to-32; do not fail the archive on those warnings.
 exec xcodebuild \
   -project "$PROJECT" \
   -target minecraftpe \
@@ -45,11 +46,14 @@ exec xcodebuild \
   -sdk iphonesimulator \
   OBJROOT="$BUILD_IOS/Build/Intermediates.noindex" \
   SYMROOT="$BUILD_IOS/Build/Products" \
-  IPHONEOS_DEPLOYMENT_TARGET=11.0 \
+  IPHONEOS_DEPLOYMENT_TARGET=12.0 \
   VALID_ARCHS="$SIM_ARCH" \
   ARCHS="$SIM_ARCH" \
   ONLY_ACTIVE_ARCH=YES \
   GCC_VERSION=com.apple.compilers.llvm.clang.1_0 \
+  GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+  OTHER_CFLAGS="-Wno-shorten-64-to-32" \
+  OTHER_CPLUSPLUSFLAGS="-Wno-shorten-64-to-32" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \

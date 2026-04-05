@@ -26,14 +26,18 @@ export NDK_MODULE_PATH="$ROOT/handheld/project/lib_projects"
 
 NPROC="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
 
+# NDK adds -Wformat -Werror=format-security; 2013 logging (e.g. LOGI(str)) fails that check on Linux.
+# Relax here so CI matches typical legacy Android builds without editing every call site.
+APP_EXTRA_CFLAGS='-Wno-error=format-security'
+
 MODE="${1:-debug}"
 case "$MODE" in
   debug)
     # NDK_DEBUG=1 keeps symbols; APP_OPTIM=debug matches a typical debug workflow.
-    (cd "$JNI_DIR" && "$NDK_BUILD" -j"$NPROC" NDK_DEBUG=1 APP_OPTIM=debug V=1)
+    (cd "$JNI_DIR" && "$NDK_BUILD" -j"$NPROC" NDK_DEBUG=1 APP_OPTIM=debug APP_CFLAGS="$APP_EXTRA_CFLAGS" V=1)
     ;;
   release)
-    (cd "$JNI_DIR" && "$NDK_BUILD" -j"$NPROC" NDK_DEBUG=0 APP_OPTIM=release V=1)
+    (cd "$JNI_DIR" && "$NDK_BUILD" -j"$NPROC" NDK_DEBUG=0 APP_OPTIM=release APP_CFLAGS="$APP_EXTRA_CFLAGS" V=1)
     ;;
   *)
     echo "usage: $0 {debug|release}"
